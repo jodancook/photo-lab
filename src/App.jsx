@@ -9,7 +9,6 @@ export default function App() {
   const {
     originalImage,
     params,
-    processing,
     exporting,
     outputCanvasRef,
     loadImage,
@@ -51,7 +50,6 @@ export default function App() {
         ) : (
           <div className="canvas-wrapper">
             <canvas ref={outputCanvasRef} className="output-canvas" />
-            {processing && <div className="processing-pip" />}
           </div>
         )}
       </main>

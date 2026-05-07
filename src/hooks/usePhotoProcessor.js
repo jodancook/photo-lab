@@ -1,86 +1,60 @@
 import { useState, useRef, useCallback, useEffect } from 'react'
-import { processImage } from '../filters/engine'
+import { WebGLRenderer } from '../filters/webgl-renderer'
 import { DEFAULT_PARAMS } from '../filters/presets'
 
-// Preview is capped at this size — keeps real-time edits fast.
-// Full-res source is only used for export.
-const PREVIEW_MAX = 900
-
-function makeScaledCanvas(img, maxPx) {
-  const scale = Math.min(1, maxPx / Math.max(img.naturalWidth, img.naturalHeight))
-  const w = Math.round(img.naturalWidth * scale)
-  const h = Math.round(img.naturalHeight * scale)
-  const c = document.createElement('canvas')
-  c.width = w; c.height = h
-  c.getContext('2d').drawImage(img, 0, 0, w, h)
-  return c
-}
+const DISPLAY_MAX = 1200  // canvas display size (GPU renders this in <10ms)
 
 export function usePhotoProcessor() {
   const [originalImage, setOriginalImage] = useState(null)
-  const [params, setParams] = useState({ ...DEFAULT_PARAMS })
-  const [processing, setProcessing] = useState(false)
-  const [exporting, setExporting] = useState(false)
+  const [params, setParams]               = useState({ ...DEFAULT_PARAMS })
+  const [exporting, setExporting]         = useState(false)
 
-  const sourceCanvasRef  = useRef(null)   // full-res, export only
-  const previewCanvasRef = useRef(null)   // scaled-down, real-time edits
-  const outputCanvasRef  = useRef(null)   // displayed canvas element
-  const workerRef        = useRef(null)
-  const pendingIdRef     = useRef(0)      // monotonic counter to discard stale results
+  const outputCanvasRef = useRef(null)
+  const rendererRef     = useRef(null)
+  const rafRef          = useRef(null)
 
-  // Spin up the worker once
-  useEffect(() => {
-    const w = new Worker(
-      new URL('../workers/processor.worker.js', import.meta.url),
-      { type: 'module' }
-    )
-    workerRef.current = w
-    return () => w.terminate()
-  }, [])
+  // Tear down renderer on unmount
+  useEffect(() => () => rendererRef.current?.destroy(), [])
 
   const loadImage = useCallback((file) => {
     const url = URL.createObjectURL(file)
     const img = new Image()
     img.onload = () => {
-      sourceCanvasRef.current  = makeScaledCanvas(img, Infinity)
-      previewCanvasRef.current = makeScaledCanvas(img, PREVIEW_MAX)
-      setOriginalImage(img)
       URL.revokeObjectURL(url)
+      setOriginalImage(img)
     }
     img.src = url
   }, [])
 
-  const renderWithParams = useCallback((newParams, sourceCanvas) => {
-    const worker = workerRef.current
-    const out    = outputCanvasRef.current
-    if (!worker || !sourceCanvas || !out) return
-
-    const id = ++pendingIdRef.current
-    setProcessing(true)
-
-    const ctx = sourceCanvas.getContext('2d')
-    const imageData = ctx.getImageData(0, 0, sourceCanvas.width, sourceCanvas.height)
-
-    // Transfer the underlying buffer to the worker (zero-copy)
-    worker.postMessage(
-      { pixels: imageData.data.buffer, width: sourceCanvas.width, height: sourceCanvas.height, params: newParams },
-      [imageData.data.buffer]
-    )
-
-    worker.onmessage = ({ data: { pixels, width, height } }) => {
-      // Drop stale results if newer render was queued
-      if (id !== pendingIdRef.current) return
-      const result = new ImageData(new Uint8ClampedArray(pixels), width, height)
-      out.width  = width
-      out.height = height
-      out.getContext('2d').putImageData(result, 0, 0)
-      setProcessing(false)
-    }
-  }, [])
-
+  // Once the image is set, size the canvas and initialise/reload the renderer.
+  // The canvas is only in the DOM after originalImage is truthy, so this
+  // effect runs after React has mounted it.
   useEffect(() => {
-    if (originalImage) renderWithParams(params, previewCanvasRef.current)
-  }, [params, originalImage, renderWithParams])
+    if (!originalImage) return
+    const canvas = outputCanvasRef.current
+    if (!canvas) return
+
+    // Size canvas to preview dimensions
+    const scale   = Math.min(1, DISPLAY_MAX / Math.max(originalImage.naturalWidth, originalImage.naturalHeight))
+    canvas.width  = Math.round(originalImage.naturalWidth  * scale)
+    canvas.height = Math.round(originalImage.naturalHeight * scale)
+
+    // Init renderer once, reload image on subsequent loads
+    if (!rendererRef.current) {
+      rendererRef.current = new WebGLRenderer(canvas)
+    }
+    rendererRef.current.loadImage(originalImage)
+  }, [originalImage])
+
+  // Render on every params change (RAF-batched so multiple updates in one tick
+  // produce only one draw call — no queue, no backlog)
+  useEffect(() => {
+    if (!originalImage || !rendererRef.current) return
+    if (rafRef.current) cancelAnimationFrame(rafRef.current)
+    rafRef.current = requestAnimationFrame(() => {
+      rendererRef.current?.render(params)
+    })
+  }, [params, originalImage])
 
   const updateParam = useCallback((key, value) => {
     setParams(prev => ({ ...prev, [key]: value }))
@@ -90,31 +64,24 @@ export function usePhotoProcessor() {
     setParams({ ...preset.params })
   }, [])
 
-  const exportImage = useCallback((filename = 'photo-lab-export.jpg', quality = 0.92) => {
-    if (!sourceCanvasRef.current) return
+  const exportImage = useCallback(async (filename = 'photo-lab-export.jpg', quality = 0.92) => {
+    if (!originalImage || !rendererRef.current) return
     setExporting(true)
-    // Process full-res on main thread (one-shot, acceptable wait for export)
-    setTimeout(() => {
-      const result = processImage(sourceCanvasRef.current, params)
-      result.toBlob(
-        (blob) => {
-          const a = document.createElement('a')
-          a.href = URL.createObjectURL(blob)
-          a.download = filename
-          a.click()
-          setTimeout(() => URL.revokeObjectURL(a.href), 1000)
-          setExporting(false)
-        },
-        'image/jpeg',
-        quality
-      )
-    }, 50)
-  }, [params])
+    try {
+      const blob = await rendererRef.current.exportBlob(params, originalImage, quality)
+      const a = document.createElement('a')
+      a.href = URL.createObjectURL(blob)
+      a.download = filename
+      a.click()
+      setTimeout(() => URL.revokeObjectURL(a.href), 1000)
+    } finally {
+      setExporting(false)
+    }
+  }, [params, originalImage])
 
   return {
     originalImage,
     params,
-    processing,
     exporting,
     outputCanvasRef,
     loadImage,
