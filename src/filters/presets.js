@@ -12,10 +12,18 @@ export const DEFAULT_PARAMS = {
   vibrance: 0,
   sharpening: 0,
   vignette: 0,
+  grain: 0,
   highlightHue: 45,
   highlightStrength: 0,
   shadowHue: 220,
   shadowStrength: 0,
+  // Per-hue HSL (Hue shift in degrees, Sat/Lum in -100 to +100)
+  redsHue: 0,    redsSat: 0,    redsLum: 0,
+  orangesHue: 0, orangesSat: 0, orangesLum: 0,
+  yellowsHue: 0, yellowsSat: 0, yellowsLum: 0,
+  greensHue: 0,  greensSat: 0,  greensLum: 0,
+  cyansHue: 0,   cyansSat: 0,   cyansLum: 0,
+  bluesHue: 0,   bluesSat: 0,   bluesLum: 0,
 }
 
 export const PRESETS = [
@@ -23,6 +31,42 @@ export const PRESETS = [
     id: 'none',
     name: 'None',
     params: { ...DEFAULT_PARAMS },
+  },
+  {
+    id: 'film',
+    name: 'Film',
+    // Tuned to match the reference: lifted shadows, warm earth tones,
+    // heavily desaturated blues/cyans, olive-shifted greens, visible grain.
+    params: {
+      ...DEFAULT_PARAMS,
+      exposure: 0.1,
+      contrast: 18,
+      highlights: -18,
+      shadows: 48,
+      warmth: 55,
+      tint: -4,
+      saturation: -8,
+      vibrance: 15,
+      grain: 30,
+      vignette: 28,
+      highlightHue: 40,
+      highlightStrength: 32,
+      shadowHue: 38,
+      shadowStrength: 18,
+      // Blues: heavily desaturate the sky
+      bluesSat: -68,
+      bluesHue: 5,
+      bluesLum: 5,
+      // Cyans: also present in sky, pull back
+      cyansSat: -32,
+      cyansLum: 3,
+      // Greens: shift toward olive
+      greensHue: 14,
+      greensSat: -12,
+      // Yellows/oranges: boost warm earth tones
+      yellowsSat: 12,
+      orangesSat: 15,
+    },
   },
   {
     id: 'gold',

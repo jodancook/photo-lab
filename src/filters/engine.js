@@ -130,6 +130,60 @@ function applySplitTone(r, g, b, highlightHue, highlightStrength, shadowHue, sha
   ]
 }
 
+// Per-hue HSL adjustments (6 hue zones, smooth blending between them)
+const HUE_ZONES = [
+  { key: 'reds',    center: 0,     width: 0.10 },
+  { key: 'oranges', center: 0.083, width: 0.067 },
+  { key: 'yellows', center: 0.167, width: 0.067 },
+  { key: 'greens',  center: 0.333, width: 0.133 },
+  { key: 'cyans',   center: 0.5,   width: 0.10 },
+  { key: 'blues',   center: 0.667, width: 0.133 },
+]
+
+function hueWeight(h, center, width) {
+  let d = Math.abs(h - center)
+  if (d > 0.5) d = 1 - d
+  return Math.max(0, 1 - Math.pow(d / width, 2))
+}
+
+function applyHSL(r, g, b, params) {
+  let [h, s, l] = rgb2hsl(r, g, b)
+  if (s < 0.02) return [r, g, b]  // skip near-neutral pixels
+
+  let dH = 0, dSMult = 0, dL = 0, totalW = 0
+
+  for (const zone of HUE_ZONES) {
+    const w = hueWeight(h, zone.center, zone.width)
+    if (w < 0.01) continue
+    dH     += w * (params[`${zone.key}Hue`] ?? 0) / 360
+    dSMult += w * (params[`${zone.key}Sat`] ?? 0) / 100
+    dL     += w * (params[`${zone.key}Lum`] ?? 0) / 100
+    totalW += w
+  }
+
+  if (totalW < 0.01) return [r, g, b]
+
+  h = ((h + dH) % 1 + 1) % 1
+  s = Math.max(0, Math.min(1, s + dSMult * s))
+  l = Math.max(0, Math.min(1, l + dL * 0.3))
+
+  return hsl2rgb(h, s, l)
+}
+
+// Film grain: luminosity-weighted noise, heavier in midtones (matches real film)
+function applyGrain(data, amount) {
+  if (amount === 0) return
+  const strength = amount / 100
+  for (let i = 0; i < data.length; i += 4) {
+    const lum = (0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2]) / 255
+    const visibility = Math.max(0, 1 - Math.abs(lum - 0.45) * 1.6)
+    const noise = (Math.random() - 0.5) * strength * visibility * 70
+    data[i]     = clamp(data[i]     + noise)
+    data[i + 1] = clamp(data[i + 1] + noise)
+    data[i + 2] = clamp(data[i + 2] + noise)
+  }
+}
+
 // Sharpening: simple unsharp mask on luminance channel
 // (applied as a post-pass, requires full ImageData)
 function applySharpening(data, width, height, amount) {
@@ -173,49 +227,50 @@ function applyVignette(data, width, height, amount) {
   }
 }
 
-export function processImage(sourceCanvas, params) {
-  const { width, height } = sourceCanvas
-  const offscreen = document.createElement('canvas')
-  offscreen.width = width
-  offscreen.height = height
-  const ctx = offscreen.getContext('2d')
-  ctx.drawImage(sourceCanvas, 0, 0)
-
-  const imageData = ctx.getImageData(0, 0, width, height)
-  const { data } = imageData
+// Core processing on raw ImageData — safe to call from a Web Worker.
+export function processImageData(imageData, params) {
+  const { data, width, height } = imageData
+  const out = new Uint8ClampedArray(data)
 
   const expLUT = exposureLUT(params.exposure ?? 0)
   const conLUT = contrastLUT(params.contrast ?? 0)
 
-  for (let i = 0; i < data.length; i += 4) {
+  for (let i = 0; i < out.length; i += 4) {
     let r = data[i], g = data[i + 1], b = data[i + 2]
 
-    // Exposure
     r = expLUT[r]; g = expLUT[g]; b = expLUT[b]
-    // Contrast
     r = conLUT[r]; g = conLUT[g]; b = conLUT[b]
-    // Highlights / Shadows
     ;[r, g, b] = applyToneCurve(r, g, b, params.highlights ?? 0, params.shadows ?? 0)
-    // Warmth & Tint
     ;[r, g, b] = applyWarmth(r, g, b, params.warmth ?? 0)
     ;[r, g, b] = applyTint(r, g, b, params.tint ?? 0)
-    // Saturation & Vibrance
     ;[r, g, b] = applySaturation(r, g, b, params.saturation ?? 0)
     ;[r, g, b] = applyVibrance(r, g, b, params.vibrance ?? 0)
-    // Split toning
+    ;[r, g, b] = applyHSL(r, g, b, params)
     ;[r, g, b] = applySplitTone(
       r, g, b,
       params.highlightHue ?? 45, params.highlightStrength ?? 0,
       params.shadowHue ?? 220, params.shadowStrength ?? 0
     )
 
-    data[i] = r; data[i + 1] = g; data[i + 2] = b
+    out[i] = r; out[i + 1] = g; out[i + 2] = b; out[i + 3] = data[i + 3]
   }
 
-  // Post-pass effects
-  applySharpening(data, width, height, params.sharpening ?? 0)
-  applyVignette(data, width, height, params.vignette ?? 0)
+  applySharpening(out, width, height, params.sharpening ?? 0)
+  applyVignette(out, width, height, params.vignette ?? 0)
+  applyGrain(out, params.grain ?? 0)
 
-  ctx.putImageData(imageData, 0, 0)
+  return new ImageData(out, width, height)
+}
+
+// Canvas convenience wrapper (main thread only).
+export function processImage(sourceCanvas, params) {
+  const { width, height } = sourceCanvas
+  const ctx = sourceCanvas.getContext('2d')
+  const imageData = ctx.getImageData(0, 0, width, height)
+  const result = processImageData(imageData, params)
+  const offscreen = document.createElement('canvas')
+  offscreen.width = width
+  offscreen.height = height
+  offscreen.getContext('2d').putImageData(result, 0, 0)
   return offscreen
 }

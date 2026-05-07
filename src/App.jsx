@@ -10,6 +10,7 @@ export default function App() {
     originalImage,
     params,
     processing,
+    exporting,
     outputCanvasRef,
     loadImage,
     updateParam,
@@ -18,7 +19,6 @@ export default function App() {
   } = usePhotoProcessor()
 
   const [activePresetId, setActivePresetId] = useState('none')
-  const [panelOpen, setPanelOpen] = useState(false)
 
   const handlePreset = useCallback((preset) => {
     setActivePresetId(preset.id)
@@ -35,14 +35,13 @@ export default function App() {
       <header className="app-header">
         <span className="app-title">Photo Lab</span>
         {originalImage && (
-          <div className="header-actions">
-            <button className="btn-ghost" onClick={() => setPanelOpen(p => !p)}>
-              {panelOpen ? 'Hide' : 'Adjust'}
-            </button>
-            <button className="btn-primary" onClick={() => exportImage()}>
-              Export
-            </button>
-          </div>
+          <button
+            className={`btn-export ${exporting ? 'loading' : ''}`}
+            onClick={() => exportImage()}
+            disabled={exporting}
+          >
+            {exporting ? 'Saving…' : 'Export'}
+          </button>
         )}
       </header>
 
@@ -51,11 +50,8 @@ export default function App() {
           <UploadZone onFile={loadImage} />
         ) : (
           <div className="canvas-wrapper">
-            {processing && <div className="processing-overlay">Processing...</div>}
-            <canvas
-              ref={outputCanvasRef}
-              className="output-canvas"
-            />
+            <canvas ref={outputCanvasRef} className="output-canvas" />
+            {processing && <div className="processing-pip" />}
           </div>
         )}
       </main>
@@ -63,9 +59,7 @@ export default function App() {
       {originalImage && (
         <footer className="app-footer">
           <PresetRail activeId={activePresetId} onSelect={handlePreset} />
-          {panelOpen && (
-            <AdjustmentPanel params={params} onUpdate={handleUpdate} />
-          )}
+          <AdjustmentPanel params={params} onUpdate={handleUpdate} />
         </footer>
       )}
     </div>
