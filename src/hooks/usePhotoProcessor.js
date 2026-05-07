@@ -69,11 +69,20 @@ export function usePhotoProcessor() {
     setExporting(true)
     try {
       const blob = await rendererRef.current.exportBlob(params, originalImage, quality)
-      const a = document.createElement('a')
-      a.href = URL.createObjectURL(blob)
-      a.download = filename
-      a.click()
-      setTimeout(() => URL.revokeObjectURL(a.href), 1000)
+      const file = new File([blob], filename, { type: 'image/jpeg' })
+
+      // On iOS Safari: use Web Share API so the system sheet appears and
+      // the user can save directly to Photos, AirDrop, etc.
+      if (navigator.canShare?.({ files: [file] })) {
+        await navigator.share({ files: [file], title: 'Photo Lab export' })
+      } else {
+        // Desktop / unsupported: fall back to regular download
+        const a = document.createElement('a')
+        a.href = URL.createObjectURL(blob)
+        a.download = filename
+        a.click()
+        setTimeout(() => URL.revokeObjectURL(a.href), 1000)
+      }
     } finally {
       setExporting(false)
     }
