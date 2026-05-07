@@ -12,6 +12,7 @@ export default function App() {
     exporting,
     outputCanvasRef,
     loadImage,
+    clearImage,
     updateParam,
     applyPreset,
     exportImage,
@@ -33,15 +34,20 @@ export default function App() {
     <div className="app">
       <header className="app-header">
         <span className="app-title">Photo Lab</span>
-        {originalImage && (
-          <button
-            className={`btn-export ${exporting ? 'loading' : ''}`}
-            onClick={() => exportImage()}
-            disabled={exporting}
-          >
-            {exporting ? 'Saving…' : 'Export'}
-          </button>
-        )}
+        <div className="header-actions">
+          {originalImage && (
+            <button className="btn-new" onClick={clearImage}>New</button>
+          )}
+          {originalImage && (
+            <button
+              className={`btn-export ${exporting ? 'loading' : ''}`}
+              onClick={() => exportImage()}
+              disabled={exporting}
+            >
+              {exporting ? 'Saving…' : 'Export'}
+            </button>
+          )}
+        </div>
       </header>
 
       <main className="app-main">

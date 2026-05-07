@@ -56,6 +56,13 @@ export function usePhotoProcessor() {
     })
   }, [params, originalImage])
 
+  const clearImage = useCallback(() => {
+    rendererRef.current?.destroy()
+    rendererRef.current = null
+    setOriginalImage(null)
+    setParams({ ...DEFAULT_PARAMS })
+  }, [])
+
   const updateParam = useCallback((key, value) => {
     setParams(prev => ({ ...prev, [key]: value }))
   }, [])
@@ -94,6 +101,7 @@ export function usePhotoProcessor() {
     exporting,
     outputCanvasRef,
     loadImage,
+    clearImage,
     updateParam,
     applyPreset,
     exportImage,
