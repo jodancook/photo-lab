@@ -97,6 +97,28 @@ body::before {
   cursor: default;
 }
 
+.btn-compare {
+  padding: 8px 16px;
+  border-radius: 40px;
+  border: 1px solid var(--glass-border);
+  background: transparent;
+  color: var(--text-dim);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.btn-compare:hover {
+  color: var(--text);
+  border-color: rgba(255,255,255,0.25);
+}
+.btn-compare.active {
+  color: var(--accent);
+  border-color: rgba(129, 140, 248, 0.5);
+  background: var(--accent-dim);
+}
+
 .btn-new {
   padding: 8px 16px;
   border-radius: 40px;
@@ -135,13 +157,76 @@ body::before {
   justify-content: center;
 }
 
+/* Shrink-wraps the canvas so compare overlay is bounded to the image */
+.canvas-inner {
+  position: relative;
+  display: flex;
+  max-width: 100%;
+  max-height: 100%;
+  line-height: 0;
+}
+
 .output-canvas {
   max-width: 100%;
   max-height: 100%;
-  object-fit: contain;
   display: block;
   border-radius: var(--radius-md);
 }
+
+/* ── Compare slider ── */
+
+.compare-overlay {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  pointer-events: none;
+  z-index: 10;
+}
+
+.compare-line {
+  width: 2px;
+  height: 100%;
+  background: rgba(255,255,255,0.9);
+  box-shadow: 0 0 8px rgba(0,0,0,0.5);
+}
+
+.compare-handle {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: #fff;
+  color: #111;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: all;
+  cursor: grab;
+  box-shadow: 0 2px 16px rgba(0,0,0,0.45);
+  touch-action: none;
+}
+.compare-handle:active { cursor: grabbing; }
+
+.compare-label {
+  position: absolute;
+  top: 12px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #fff;
+  text-shadow: 0 1px 4px rgba(0,0,0,0.6);
+  white-space: nowrap;
+  pointer-events: none;
+}
+.compare-label-before { right: calc(50% + 10px); }
+.compare-label-after  { left:  calc(50% + 10px); }
 
 /* Tiny pulsing dot while processing — non-intrusive */
 .processing-pip {

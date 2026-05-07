@@ -3,6 +3,7 @@ import { usePhotoProcessor } from './hooks/usePhotoProcessor'
 import { UploadZone } from './components/UploadZone'
 import { PresetRail } from './components/PresetRail'
 import { AdjustmentPanel } from './components/AdjustmentPanel'
+import { CompareSlider } from './components/CompareSlider'
 import './App.css'
 
 export default function App() {
@@ -16,9 +17,12 @@ export default function App() {
     updateParam,
     applyPreset,
     exportImage,
+    setSplitPos,
   } = usePhotoProcessor()
 
   const [activePresetId, setActivePresetId] = useState('none')
+  const [comparing, setComparing]           = useState(false)
+  const [splitPos, setSplitPosState]        = useState(0.5)
 
   const handlePreset = useCallback((preset) => {
     setActivePresetId(preset.id)
@@ -30,6 +34,19 @@ export default function App() {
     updateParam(key, value)
   }, [updateParam])
 
+  const toggleCompare = useCallback(() => {
+    setComparing(prev => {
+      const next = !prev
+      setSplitPos(next ? 0.5 : -1)
+      return next
+    })
+  }, [setSplitPos])
+
+  const handleSplitChange = useCallback((pos) => {
+    setSplitPosState(pos)
+    setSplitPos(pos)
+  }, [setSplitPos])
+
   return (
     <div className="app">
       <header className="app-header">
@@ -37,6 +54,14 @@ export default function App() {
         <div className="header-actions">
           {originalImage && (
             <button className="btn-new" onClick={clearImage}>New</button>
+          )}
+          {originalImage && (
+            <button
+              className={`btn-compare ${comparing ? 'active' : ''}`}
+              onClick={toggleCompare}
+            >
+              Compare
+            </button>
           )}
           {originalImage && (
             <button
@@ -55,7 +80,12 @@ export default function App() {
           <UploadZone onFile={loadImage} />
         ) : (
           <div className="canvas-wrapper">
-            <canvas ref={outputCanvasRef} className="output-canvas" />
+            <div className="canvas-inner">
+              <canvas ref={outputCanvasRef} className="output-canvas" />
+              {comparing && (
+                <CompareSlider pos={splitPos} onChange={handleSplitChange} />
+              )}
+            </div>
           </div>
         )}
       </main>

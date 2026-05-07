@@ -34,6 +34,7 @@ uniform float u_hslLum[6];
 uniform float u_sharpening;
 uniform float u_vignette;
 uniform float u_grain;
+uniform float u_splitPos;  // -1 = off, 0-1 = before/after split position
 
 in vec2 v_uv;
 out vec4 fragColor;
@@ -198,6 +199,11 @@ void main() {
   col = doVignette(col, uv, u_vignette);
   col = doGrain(col, uv, u_grain);
 
+  // Before/after split: left of splitPos shows original
+  if (u_splitPos >= 0.0 && v_uv.x < u_splitPos) {
+    col = texture(u_image, uv).rgb;
+  }
+
   fragColor = vec4(col, 1.0);
 }`
 
@@ -241,7 +247,7 @@ export class WebGLRenderer {
       'u_warmth', 'u_tint', 'u_saturation', 'u_vibrance',
       'u_hiHue', 'u_hiStrength', 'u_shHue', 'u_shStrength',
       'u_hslHue', 'u_hslSat', 'u_hslLum',
-      'u_sharpening', 'u_vignette', 'u_grain',
+      'u_sharpening', 'u_vignette', 'u_grain', 'u_splitPos',
     ]
     this.locs = {}
     for (const n of names) this.locs[n] = gl.getUniformLocation(this.program, n)
@@ -264,7 +270,7 @@ export class WebGLRenderer {
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR)
   }
 
-  render(params) {
+  render(params, splitPos = -1) {
     const { gl, canvas, locs } = this
     gl.viewport(0, 0, canvas.width, canvas.height)
     gl.useProgram(this.program)
@@ -290,6 +296,7 @@ export class WebGLRenderer {
     gl.uniform1f(locs.u_sharpening,   params.sharpening       ?? 0)
     gl.uniform1f(locs.u_vignette,     params.vignette         ?? 0)
     gl.uniform1f(locs.u_grain,        params.grain            ?? 0)
+    gl.uniform1f(locs.u_splitPos,     splitPos)
 
     // Per-hue HSL — hue values divided by 360 so shader works in 0-1 units
     gl.uniform1fv(locs.u_hslHue, HSL_KEYS.map(k => (params[`${k}Hue`] ?? 0) / 360))

@@ -46,15 +46,25 @@ export function usePhotoProcessor() {
     rendererRef.current.loadImage(originalImage)
   }, [originalImage])
 
-  // Render on every params change (RAF-batched so multiple updates in one tick
-  // produce only one draw call — no queue, no backlog)
-  useEffect(() => {
+  const splitPosRef = useRef(-1)
+
+  const render = useCallback(() => {
     if (!originalImage || !rendererRef.current) return
     if (rafRef.current) cancelAnimationFrame(rafRef.current)
     rafRef.current = requestAnimationFrame(() => {
-      rendererRef.current?.render(params)
+      rendererRef.current?.render(paramsRef.current, splitPosRef.current)
     })
-  }, [params, originalImage])
+  }, [originalImage])
+
+  const paramsRef = useRef(params)
+  useEffect(() => { paramsRef.current = params }, [params])
+
+  useEffect(() => { render() }, [params, originalImage, render])
+
+  const setSplitPos = useCallback((pos) => {
+    splitPosRef.current = pos
+    render()
+  }, [render])
 
   const clearImage = useCallback(() => {
     rendererRef.current?.destroy()
@@ -105,5 +115,6 @@ export function usePhotoProcessor() {
     updateParam,
     applyPreset,
     exportImage,
+    setSplitPos,
   }
 }
